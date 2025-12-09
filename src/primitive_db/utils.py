@@ -1,12 +1,13 @@
 import json
 import os
 
+metadata_path = "data/metadata.json"
 
-def load_metadata(filepath):
-    if not os.path.exists(filepath):
+def load_metadata():
+    if not os.path.exists(metadata_path):
         return {}
     
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(metadata_path, "r", encoding="utf-8") as f:
         try:
             data = json.load(f)
             if isinstance(data, dict):
@@ -19,9 +20,9 @@ def load_metadata(filepath):
             return {}
 
 
-def save_metadata(filepath, data):
+def save_metadata(data):
     if not isinstance(data, dict):
         raise ValueError("data must be a dictionary")
-    
-    with open(filepath, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+    with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)

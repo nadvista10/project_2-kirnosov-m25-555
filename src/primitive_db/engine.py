@@ -13,7 +13,7 @@ def run():
         "list_tables": list_tables_command,
     }
 
-    metadata = load_metadata("metadata.json")
+    metadata = load_metadata()
 
     print_help_command()
 
@@ -40,7 +40,7 @@ def create_table_command(metadata, args):
     
     try:
         create_table(metadata, args[0], args[1:])
-        save_metadata("metadata.json", metadata)
+        save_metadata(metadata)
     except ValueError as e:
         print(e)
 
@@ -51,7 +51,7 @@ def drop_table_command(metadata, args):
         return
     try:
         drop_table(metadata, args[0])
-        save_metadata("metadata.json", metadata)
+        save_metadata(metadata)
     except ValueError as e:
         print(e)
 
