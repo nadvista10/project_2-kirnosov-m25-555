@@ -1,11 +1,10 @@
 [project]
-name = "project#2-kirnosov-m25-555"
+name = "project_2-kirnosov-m25-555"
 version = "0.1.0"
 description = ""
 authors = [
     {name = "Egor Kirnosov",email = "kirnosov.eg@yandex.ru"}
 ]
-readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
 ]
@@ -17,5 +16,8 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 packages = [
-    { include = "src" },
+    { include = "primitive_db", from = "src" }
 ]
+
+[tool.poetry.scripts]
+project = "src.primitive_db.main:main" 
