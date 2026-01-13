@@ -1,4 +1,4 @@
-from decorators import confirm_action, handle_db_errors, log_time
+from decorators import confirm_action, create_cacher, handle_db_errors, log_time
 from primitive_db.utils import (
     delete_table_data,
     load_table_data,
@@ -7,6 +7,14 @@ from primitive_db.utils import (
 )
 
 reserved_id_column = "__ID"
+
+_select_cache = create_cacher()
+
+
+def _select_cache_key(table_name, condition_dict):
+    if not condition_dict:
+        return (table_name, None)
+    return (table_name, tuple(sorted(condition_dict.items())))
 
 
 def _coerce_value(columns, column_name, raw_value, *, mode):
@@ -75,6 +83,7 @@ def create_table(metadata, table_name, columns):
 
     metadata[table_name] = table
     save_metadata(metadata)
+    _select_cache.mark_dirty()
 
 
 @handle_db_errors
@@ -87,6 +96,7 @@ def drop_table(metadata, table_name):
     del metadata[table_name]
     delete_table_data(table_name)
     save_metadata(metadata)
+    _select_cache.mark_dirty()
 
 
 @handle_db_errors
@@ -115,6 +125,7 @@ def insert(metadata, table_name, row_data):
     table_data[new_id] = row
 
     save_table_data(table_name, table_data)
+    _select_cache.mark_dirty()
 
 
 @handle_db_errors
@@ -130,22 +141,27 @@ def select(metadata, table_name, condition_dict=None):
         missing = [col for col in (condition_dict or {}).keys() if col not in columns]
         raise KeyError(f"Unknown column(s) in condition: {', '.join(missing)}")
 
-    table_data = load_table_data(table_name)
+    key = _select_cache_key(table_name, condition_dict)
 
-    if not condition_dict:
-        return list(table_data.values())
+    def compute():
+        table_data = load_table_data(table_name)
 
-    results = []
-    for _, row in table_data.items():
-        matches = True
-        for col, value in condition_dict.items():
-            cond_value = _coerce_value(columns, col, value, mode="condition")
-            if row[col] != cond_value:
-                matches = False
-                break
-        if matches:
-            results.append(row)
-    return results
+        if not condition_dict:
+            return list(table_data.values())
+
+        results = []
+        for _, row in table_data.items():
+            matches = True
+            for col, value in condition_dict.items():
+                cond_value = _coerce_value(columns, col, value, mode="condition")
+                if row[col] != cond_value:
+                    matches = False
+                    break
+            if matches:
+                results.append(row)
+        return results
+
+    return _select_cache(key, compute)
     
 
 
@@ -199,6 +215,7 @@ def update(metadata, table_name, set_clause, condition_dict):
         updated_count += 1
 
     save_table_data(table_name, table_data)
+    _select_cache.mark_dirty()
     return updated_count
 
 
@@ -216,5 +233,6 @@ def delete(metadata, table_name, condition_dict):
         row_id: row for row_id, row in table_data.items() if row not in todelete
     }
     save_table_data(table_name, filtered_table)
+    _select_cache.mark_dirty()
 
     return deleted_count
