@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import wraps
+from time import monotonic
 
 
 def confirm_action(action_name: str):
@@ -50,5 +51,20 @@ def handle_db_errors(func):
         except Exception as e:
             print(f"Произошла непредвиденная ошибка: {e}")
             return None
+
+    return wrapper
+
+
+def log_time(func):
+    """Замеряет время выполнения функции и печатает в консоль."""
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = monotonic()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            elapsed = monotonic() - start
+            print(f"Функция {func.__name__} выполнилась за {elapsed:.3f} секунд.")
 
     return wrapper
