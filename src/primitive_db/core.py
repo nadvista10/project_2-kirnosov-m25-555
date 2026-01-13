@@ -42,8 +42,6 @@ def drop_table(metadata, table_name):
 def insert(metadata, table_name, row_data):
     if table_name not in metadata:
         raise ValueError(f"Table '{table_name}' does not exist.")
-    if reserved_id_column in row_data:
-        raise ValueError(f"Column name '{reserved_id_column}' is reserved.")
     
     table = metadata[table_name]
     columns = table["columns"]
@@ -85,11 +83,7 @@ def insert(metadata, table_name, row_data):
 
 
 def select(table_data, where_clause=None):
-    results = []
-    for row_id, row in table_data.items():
-        if where_clause is None or evaluate_where_clause(row, where_clause):
-            results.append(row)
-    return results
+    pass
 
 
 def update(table_data, set_clause, where_clause):
@@ -98,10 +92,3 @@ def update(table_data, set_clause, where_clause):
 
 def delete(table_data, where_clause):
     pass
-
-
-def evaluate_where_clause(row, where_clause):
-    for column, expected_value in where_clause.items():
-        if column not in row or str(row[column]) != str(expected_value):
-            return False
-    return True

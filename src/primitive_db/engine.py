@@ -31,7 +31,7 @@ def run():
                 break
 
             if command in commands_with_args:
-                commands_with_args[command](metadata, args[1:])
+                commands_with_args[command](metadata, user_input, args[1:])
             elif command in commands_no_args:
                 commands_no_args[command]()
             else:
@@ -40,7 +40,7 @@ def run():
         print("\nЗавершение работы.")
 
 
-def create_table_command(metadata, args):
+def create_table_command(metadata, user_input, args):
     if len(args) < 1:
         print("Для создания таблицы необходимо указать имя")
         return
@@ -54,7 +54,7 @@ def create_table_command(metadata, args):
         print(e)
 
 
-def drop_table_command(metadata, args):
+def drop_table_command(metadata, user_input, args):
     if len(args) < 1:
         print("Для удаления таблицы необходимо указать имя")
         return
@@ -66,19 +66,40 @@ def drop_table_command(metadata, args):
         print(e)
 
 
-def list_tables_command(metadata, args):
+def list_tables_command(metadata, user_input, args):
     for table_name in metadata.keys():
         print(f"- {table_name}")
 
 
-def insert_command(metadata, args):
+def insert_command(metadata, user_input, args):
+    import re
+
+    pattern = r'^\s*insert\s+into\s+(\w+)\s+values\s*\((.*)\)\s*$'
+    match = re.match(pattern, user_input, re.IGNORECASE)
+    if not match:
+        print("Синтаксис: insert into <имя_таблицы> values (<значение1>, ...)")
+        return
+    table_name = match.group(1)
+    values_str = match.group(2)
+
     try:
-        insert(metadata, args[0], args[1:])
-    except ValueError as e:
-        print(e)
+        lexer = shlex.shlex(values_str, posix=True)
+        lexer.whitespace = ','
+        lexer.whitespace_split = True
+        lexer.quotes = '"\''
+        values = [v.strip() for v in lexer if v.strip() != '']
+    except Exception as e:
+        print(f"Ошибка разбора значений: {e}")
+        return
+
+    try:
+        insert(metadata, table_name, values)
+    except Exception as e:
+        print(f"Ошибка вставки: {e}")
+    
 
 
-def select_command(metadata, args):
+def select_command(metadata, user_input, args):
     pass
 
 
