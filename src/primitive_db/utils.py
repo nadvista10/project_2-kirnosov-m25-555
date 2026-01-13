@@ -1,7 +1,6 @@
 import json
 import os
 
-
 data_path = "data"
 metadata_file_name = "metadata"
 
@@ -25,7 +24,6 @@ def save_table_data(table_name, data):
 
 
 def delete_table_data(table_name):
-    """Удаляет файл данных таблицы по имени."""
     file_path = os.path.join(data_path, f"{table_name}.json")
     if os.path.exists(file_path):
         os.remove(file_path)
@@ -51,8 +49,6 @@ def load_data_from_json(file_name):
             if isinstance(data, dict):
                 return data
             else:
-                # Если в файле не словарь, возвращаем пустой
                 return {}
         except json.JSONDecodeError:
-            # Если файл есть, но JSON некорректен
             return {}

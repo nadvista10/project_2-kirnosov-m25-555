@@ -2,6 +2,38 @@ from primitive_db.utils import delete_table_data, load_table_data, save_table_da
 
 reserved_id_column = "__ID"
 
+
+def _coerce_value(columns, column_name, raw_value, *, mode):
+    column_type = columns[column_name]
+
+    if mode == "condition":
+        value_label = "condition value"
+    else:
+        value_label = "value"
+
+    if column_type == "int":
+        try:
+            return int(raw_value)
+        except ValueError:
+            raise ValueError(
+                f"Invalid {value_label} for column '{column_name}': expected int."
+            )
+
+    if column_type == "bool":
+        value_str = str(raw_value).lower()
+        if value_str in ("true", "1"):
+            return True
+        if value_str in ("false", "0"):
+            return False
+        raise ValueError(
+            f"Invalid {value_label} for column '{column_name}': expected bool."
+        )
+
+    if column_type == "str":
+        return str(raw_value)
+
+    raise ValueError(f"Unsupported column type: {column_type}")
+
 def create_table(metadata, table_name, columns):
     if table_name in metadata:
         raise ValueError(f"Table '{table_name}' already exists.")
@@ -13,7 +45,9 @@ def create_table(metadata, table_name, columns):
     for column in columns:
         result = column.split(":")
         if len(result) != 2:
-            raise ValueError(f"Invalid column definition: {column}. Expected format 'name:type'.")
+            raise ValueError(
+                f"Invalid column definition: {column}. Expected format 'name:type'."
+            )
         
         c_name, c_type = result
 
@@ -21,7 +55,9 @@ def create_table(metadata, table_name, columns):
             raise ValueError("Column name 'ID' is reserved.")
         
         if c_name in table_columns:
-            raise ValueError(f"Column '{c_name}' already exists in table '{table_name}'.")
+            raise ValueError(
+                f"Column '{c_name}' already exists in table '{table_name}'."
+            )
 
         if c_type == "int" or c_type == "str" or c_type == "bool":
             table_columns[c_name] = c_type
@@ -50,28 +86,11 @@ def insert(metadata, table_name, row_data):
         raise ValueError("Row data does not match table columns.")
 
     row = {}
-    for idx, (column_name, column_type) in enumerate(columns.items()):
+    for idx, (column_name, _) in enumerate(columns.items()):
         if column_name == reserved_id_column:
             continue
-
-        value = row_data[idx-1]  # -1 because of reserved ID column
-
-        if column_type == "int":
-            try:
-                row[column_name] = int(value)
-            except ValueError:
-                raise ValueError(f"Invalid value for column '{column_name}': expected int.")
-        elif column_type == "str":
-            row[column_name] = str(value)
-        elif column_type == "bool":
-            if value.lower() in ("true", "1"):
-                row[column_name] = True
-            elif value.lower() in ("false", "0"):
-                row[column_name] = False
-            else:
-                raise ValueError(f"Invalid value for column '{column_name}': expected bool.")
-        else:
-            raise ValueError(f"Unsupported column type: {column_type}")
+        value = row_data[idx - 1]  # -1 because of reserved ID column
+        row[column_name] = _coerce_value(columns, column_name, value, mode="insert")
 
     table_data = load_table_data(table_name)
 
@@ -90,7 +109,9 @@ def select(metadata, table_name, condition_dict=None):
     columns = table["columns"]
 
     if any(col not in columns for col in (condition_dict or {}).keys()):
-        raise ValueError("One or more columns in the condition do not exist in the table.")
+        raise ValueError(
+            "One or more columns in the condition do not exist in the table."
+        )
 
     table_data = load_table_data(table_name)
 
@@ -98,32 +119,16 @@ def select(metadata, table_name, condition_dict=None):
         return list(table_data.values())
 
     results = []
-    for id, row in table_data.items():
-        all = True
+    for _, row in table_data.items():
+        matches = True
         for col, value in condition_dict.items():
-            if columns[col] == "int":
-                try:
-                    cond_value = int(value)
-                except ValueError:
-                    raise ValueError(f"Invalid condition value for column '{col}': expected int.")
-            elif columns[col] == "bool":
-                if value.lower() in ("true", "1"):
-                    cond_value = True
-                elif value.lower() in ("false", "0"):
-                    cond_value = False
-                else:
-                    raise ValueError(f"Invalid condition value for column '{col}': expected bool.")
-            elif columns[col] == "str":
-                cond_value = str(value)
-            else:
-                raise ValueError(f"Unsupported column type: {columns[col]}")
-            
+            cond_value = _coerce_value(columns, col, value, mode="condition")
             if row[col] != cond_value:
-                all = False
+                matches = False
                 break
-        if all:
+        if matches:
             results.append(row)
-    return results  
+    return results
     
 
 def update(metadata, table_name, set_clause, condition_dict):
@@ -143,29 +148,18 @@ def update(metadata, table_name, set_clause, condition_dict):
         if any(col not in columns for col in condition_dict.keys()):
             raise ValueError("One or more columns in WHERE do not exist in the table.")
 
-    def _coerce(col, value):
-        col_type = columns[col]
-        if col_type == "int":
-            try:
-                return int(value)
-            except ValueError:
-                raise ValueError(f"Invalid value for column '{col}': expected int.")
-        if col_type == "bool":
-            if str(value).lower() in ("true", "1"):
-                return True
-            if str(value).lower() in ("false", "0"):
-                return False
-            raise ValueError(f"Invalid value for column '{col}': expected bool.")
-        if col_type == "str":
-            return str(value)
-        raise ValueError(f"Unsupported column type: {col_type}")
-
     table_data = load_table_data(table_name)
 
-    coerced_set = {col: _coerce(col, val) for col, val in set_clause.items()}
+    coerced_set = {
+        col: _coerce_value(columns, col, val, mode="set")
+        for col, val in set_clause.items()
+    }
     coerced_where = None
     if condition_dict:
-        coerced_where = {col: _coerce(col, val) for col, val in condition_dict.items()}
+        coerced_where = {
+            col: _coerce_value(columns, col, val, mode="condition")
+            for col, val in condition_dict.items()
+        }
 
     updated_count = 0
     for _, row in table_data.items():
@@ -191,7 +185,9 @@ def delete(metadata, table_name, condition_dict):
     deleted_count = len(todelete)
     table_data = load_table_data(table_name)
 
-    filtered_table = {id: row for id, row in table_data.items() if row not in todelete}
+    filtered_table = {
+        row_id: row for row_id, row in table_data.items() if row not in todelete
+    }
     save_table_data(table_name, filtered_table)
 
     return deleted_count

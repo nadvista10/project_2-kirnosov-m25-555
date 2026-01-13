@@ -1,9 +1,34 @@
 import re
-import prompt
 import shlex
+
+import prompt
 from prettytable import PrettyTable
+
+from primitive_db.core import create_table, delete, drop_table, insert, select, update
 from primitive_db.utils import load_metadata, save_metadata
-from primitive_db.core import create_table, drop_table, insert, select, delete, update
+
+
+def _require_table(metadata, table_name):
+    if table_name not in metadata:
+        raise ValueError(f"Таблица '{table_name}' не существует.")
+
+
+def _print_rows(rows):
+    if not rows:
+        print("Нет записей.")
+        return
+    table = PrettyTable()
+    table.field_names = list(rows[0].keys())
+    for row in rows:
+        table.add_row([row[col] for col in table.field_names])
+    print(table)
+
+
+def _match(pattern, user_input, usage):
+    match = re.match(pattern, user_input, re.IGNORECASE)
+    if not match:
+        raise ValueError(usage)
+    return match
 
 
 def run():
@@ -26,19 +51,27 @@ def run():
     try:
         while True:
             user_input = prompt.string("Введите команду:")
-
-            args = shlex.split(user_input)
+            try:
+                args = shlex.split(user_input)
+            except ValueError as e:
+                print(f"Некорректный ввод: {e}")
+                continue
             command = args[0] if args else ""
 
             if command == "exit":
                 break
 
-            if command in commands_with_args:
-                commands_with_args[command](metadata, user_input, args[1:])
-            elif command in commands_no_args:
-                commands_no_args[command]()
-            else:
-                show_error_command()
+            handler = commands_with_args.get(command)
+            if handler is not None:
+                handler(metadata, user_input, args[1:])
+                continue
+
+            handler = commands_no_args.get(command)
+            if handler is not None:
+                handler()
+                continue
+
+            show_error_command()
     except KeyboardInterrupt:
         print("\nЗавершение работы.")
 
@@ -64,7 +97,7 @@ def drop_table_command(metadata, user_input, args):
     try:
         drop_table(metadata, args[0])
         save_metadata(metadata)
-        
+
     except ValueError as e:
         print(e)
 
@@ -75,121 +108,89 @@ def list_tables_command(metadata, user_input, args):
 
 
 def insert_command(metadata, user_input, args):
-    pattern = r'^\s*insert\s+into\s+(\w+)\s+values\s*\((.*)\)\s*$'
-    match = re.match(pattern, user_input, re.IGNORECASE)
-    if not match:
-        print("Синтаксис: insert into <имя_таблицы> values (<значение1>, ...)")
-        return
-    table_name = match.group(1)
-    values_str = match.group(2)
-
-    if table_name not in metadata:
-        print(f"Таблица '{table_name}' не существует.")
-        return
-
+    usage = "Синтаксис: insert into <имя_таблицы> values (<значение1>, ...)"
     try:
+        match = _match(
+            r'^\s*insert\s+into\s+(\w+)\s+values\s*\((.*)\)\s*$',
+            user_input,
+            usage,
+        )
+        table_name = match.group(1)
+        values_str = match.group(2)
+        _require_table(metadata, table_name)
+
         lexer = shlex.shlex(values_str, posix=True)
         lexer.whitespace = ','
         lexer.whitespace_split = True
         lexer.quotes = '"\''
-        values = [v.strip() for v in lexer if v.strip() != '']
-    except Exception as e:
-        print(f"Ошибка разбора значений: {e}")
-        return
+        values = [v.strip() for v in lexer if v.strip()]
 
-    try:
         insert(metadata, table_name, values)
+    except ValueError as e:
+        print(e)
     except Exception as e:
         print(f"Ошибка вставки: {e}")
     
 
 def select_command(metadata, user_input, args):
-    # Ожидается: select from <table> [where ...]
-    pattern = r'^\s*select\s+from\s+(\w+)(.*)$'
-    match = re.match(pattern, user_input, re.IGNORECASE)
-    if not match:
-        print("Синтаксис: select from <имя_таблицы> [where ...]")
-        return
-    
-    table_name = match.group(1)
-
-    if table_name not in metadata:
-        print(f"Таблица '{table_name}' не существует.")
-        return
-
-    rest = match.group(2).strip()
-
+    usage = "Синтаксис: select from <имя_таблицы> [where ...]"
     try:
-        where_dict = _parse_where(rest) if rest else {}
-        results = select(metadata, table_name, where_dict if where_dict else None)
-        if not results:
-            print("Нет записей.")
-            return
+        match = _match(r'^\s*select\s+from\s+(\w+)(.*)$', user_input, usage)
+        table_name = match.group(1)
+        _require_table(metadata, table_name)
 
-        pt = PrettyTable()
-        pt.field_names = list(results[0].keys())
-        for row in results:
-            pt.add_row([row[col] for col in pt.field_names])
-        print(pt)
+        rest = match.group(2).strip()
+        where_dict = _parse_where(rest) if rest else {}
+
+        rows = select(metadata, table_name, where_dict if where_dict else None)
+        _print_rows(rows)
+    except ValueError as e:
+        print(e)
     except Exception as e:
         print(f"Ошибка выборки: {e}")
 
 
 def delete_command(metadata, user_input, args):
-    pattern = r'^\s*delete\s+from\s+(\w+)(.*)$'
-    match = re.match(pattern, user_input, re.IGNORECASE)
-    if not match:
-        print("Синтаксис: select from <имя_таблицы> [where ...]")
-        return
-    
-    table_name = match.group(1)
-
-    if table_name not in metadata:
-        print(f"Таблица '{table_name}' не существует.")
-        return
-
-    rest = match.group(2).strip()
-
+    usage = "Синтаксис: delete from <имя_таблицы> [where ...]"
     try:
+        match = _match(r'^\s*delete\s+from\s+(\w+)(.*)$', user_input, usage)
+        table_name = match.group(1)
+        _require_table(metadata, table_name)
+        rest = match.group(2).strip()
         where_dict = _parse_where(rest) if rest else {}
-        result = delete(metadata, table_name, where_dict if where_dict else None)
-        print(f"Удалено записей: {result}")
-        
+        deleted = delete(metadata, table_name, where_dict if where_dict else None)
+        print(f"Удалено записей: {deleted}")
+    except ValueError as e:
+        print(e)
     except Exception as e:
         print(f"Ошибка выборки: {e}")
 
 
 def update_command(metadata, user_input, args):
-    pattern = r'^\s*update\s+(\w+)(.*)$'
-    match = re.match(pattern, user_input, re.IGNORECASE)
-    if not match:
-        print("Синтаксис: update <имя_таблицы> set <столбец>=<значение> where <столбец>=<значение>")
-        return
-
-    table_name = match.group(1)
-    rest = match.group(2).strip()
-
-    if table_name not in metadata:
-        print(f"Таблица '{table_name}' не существует.")
-        return
-
-    if not rest:
-        print("Синтаксис: update <имя_таблицы> set <столбец>=<значение> where <столбец>=<значение>")
-        return
-
+    usage = (
+        "Синтаксис: update <имя_таблицы> set <столбец>=<значение> [set ...] "
+        "where <столбец>=<значение> [where ...]"
+    )
     try:
+        match = _match(r'^\s*update\s+(\w+)(.*)$', user_input, usage)
+        table_name = match.group(1)
+        _require_table(metadata, table_name)
+        rest = match.group(2).strip()
+        if not rest:
+            raise ValueError(usage)
+
         set_dict = _parse_set(rest)
         where_dict = _parse_where(rest)
 
         if not set_dict:
-            print("Не указаны изменения. Добавьте хотя бы один 'set'.")
-            return
+            raise ValueError("Не указаны изменения. Добавьте хотя бы один 'set'.")
         if not where_dict:
-            print("Не указаны условия. Добавьте хотя бы один 'where'.")
-            return
+            raise ValueError("Не указаны условия. Добавьте хотя бы один 'where'.")
 
         updated = update(metadata, table_name, set_dict, where_dict)
         print(f"Обновлено записей: {updated}")
+    except ValueError as e:
+        print(e)
     except Exception as e:
         print(f"Ошибка обновления: {e}")
 
@@ -204,7 +205,10 @@ def print_help_command():
     print("<command> create_table <имя_таблицы> <столбец1:тип> .. - создать таблицу")
     print("<command> list_tables - показать список всех таблиц")
     print("<command> drop_table <имя_таблицы> - удалить таблицу")
-    print("<command> insert into <имя_таблицы> values (<значение1>, ...) - добавить запись")
+    print(
+        "<command> insert into <имя_таблицы> values (<значение1>, ...) - "
+        "добавить запись"
+    )
     print("<command> select from <имя_таблицы> [where ...] - выбрать записи")
     print("<command> delete from <имя_таблицы> [where ...] - удалить записи")
     print("<command> update <имя_таблицы> set ... where ... - обновить записи")
