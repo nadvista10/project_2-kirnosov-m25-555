@@ -1,4 +1,4 @@
-from decorators import handle_db_errors
+from decorators import confirm_action, handle_db_errors
 from primitive_db.utils import (
     delete_table_data,
     load_table_data,
@@ -77,6 +77,7 @@ def create_table(metadata, table_name, columns):
 
 
 @handle_db_errors
+@confirm_action("удаление таблицы")
 def drop_table(metadata, table_name):
     if table_name not in metadata:
         raise KeyError(f"Table '{table_name}' does not exist.")
@@ -197,6 +198,7 @@ def update(metadata, table_name, set_clause, condition_dict):
 
 
 @handle_db_errors
+@confirm_action("удаление записей")
 def delete(metadata, table_name, condition_dict):
     todelete = select(metadata, table_name, condition_dict)
     if todelete is None:

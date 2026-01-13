@@ -3,13 +3,24 @@ from __future__ import annotations
 from functools import wraps
 
 
+def confirm_action(action_name: str):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            answer = input(
+                f'Вы уверены, что хотите выполнить "{action_name}"? [y/n]: '
+            ).strip().lower()
+            if answer != "y":
+                print("Операция отменена.")
+                return None
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
 def handle_db_errors(func):
-    """Централизованная обработка ошибок DB.
-
-    - Не пробрасывает исключения дальше (CLI не падает).
-    - Печатает человекочитаемое сообщение.
-    """
-
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
