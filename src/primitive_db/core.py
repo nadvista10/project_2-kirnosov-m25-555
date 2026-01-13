@@ -1,5 +1,4 @@
-from primitive_db.utils import load_table_data, save_table_data
-
+from primitive_db.utils import delete_table_data, load_table_data, save_table_data
 
 reserved_id_column = "__ID"
 
@@ -12,7 +11,11 @@ def create_table(metadata, table_name, columns):
     table_columns = table["columns"]
 
     for column in columns:
-        c_name, c_type = column.split(":")
+        result = column.split(":")
+        if len(result) != 2:
+            raise ValueError(f"Invalid column definition: {column}. Expected format 'name:type'.")
+        
+        c_name, c_type = result
 
         if c_name == reserved_id_column:
             raise ValueError("Column name 'ID' is reserved.")
@@ -33,6 +36,7 @@ def drop_table(metadata, table_name):
         raise ValueError(f"Table '{table_name}' does not exist.")
     
     del metadata[table_name]
+    delete_table_data(table_name)
 
 
 def insert(metadata, table_name, row_data):

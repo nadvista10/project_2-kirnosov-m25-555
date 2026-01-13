@@ -24,6 +24,13 @@ def save_table_data(table_name, data):
     save_data_to_json(table_name, data)
 
 
+def delete_table_data(table_name):
+    """Удаляет файл данных таблицы по имени."""
+    file_path = os.path.join(data_path, f"{table_name}.json")
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+
 def save_data_to_json(file_name, data):
     os.makedirs(data_path, exist_ok=True)
     file_path = os.path.join(data_path, f"{file_name}.json")

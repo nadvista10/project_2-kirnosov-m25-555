@@ -20,28 +20,33 @@ def run():
 
     print_help_command()
 
-    while(True):
-        user_input = prompt.string("Введите команду:")
+    try:
+        while True:
+            user_input = prompt.string("Введите команду:")
 
-        args = shlex.split(user_input)
-        command = args[0] if args else ""
+            args = shlex.split(user_input)
+            command = args[0] if args else ""
 
-        if command == "exit":
-            break
+            if command == "exit":
+                break
 
-        if command in commands_with_args:
-            commands_with_args[command](metadata, args[1:])
-        elif command in commands_no_args:
-            commands_no_args[command]()
-        else:
-            show_error_command()
+            if command in commands_with_args:
+                commands_with_args[command](metadata, args[1:])
+            elif command in commands_no_args:
+                commands_no_args[command]()
+            else:
+                show_error_command()
+    except KeyboardInterrupt:
+        print("\nЗавершение работы.")
 
 
 def create_table_command(metadata, args):
     if len(args) < 1:
         print("Для создания таблицы необходимо указать имя")
         return
-    
+    if len(args) < 2:
+        print("Для создания таблицы необходимо указать хотя бы один столбец")
+        return
     try:
         create_table(metadata, args[0], args[1:])
         save_metadata(metadata)
@@ -56,6 +61,7 @@ def drop_table_command(metadata, args):
     try:
         drop_table(metadata, args[0])
         save_metadata(metadata)
+        
     except ValueError as e:
         print(e)
 
@@ -73,26 +79,7 @@ def insert_command(metadata, args):
 
 
 def select_command(metadata, args):
-    if len(args) < 1:
-        print("Для выбора данных необходимо указать имя таблицы")
-        return
-    table_name = args[0]
-    args.remove(table_name)
-
-    if len(args) % 2 != 0:
-        print("Некорректный формат условий")
-        return
-    where_clause = {}
-    for i in range(0, len(args), 2):
-        where_clause[args[i]] = args[i+1]
-
-    try:
-        table_data = load_table_data(table_name)
-        results = select(table_data, where_clause if where_clause else None)
-        for row in results:
-            print(row)
-    except ValueError as e:
-        print(e)
+    pass
 
 
 def show_error_command():
