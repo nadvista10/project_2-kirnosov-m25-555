@@ -1,4 +1,4 @@
-from decorators import confirm_action, handle_db_errors
+from decorators import confirm_action, handle_db_errors, log_time
 from primitive_db.utils import (
     delete_table_data,
     load_table_data,
@@ -42,6 +42,7 @@ def _coerce_value(columns, column_name, raw_value, *, mode):
 
 
 @handle_db_errors
+@log_time
 def create_table(metadata, table_name, columns):
     if table_name in metadata:
         raise FileExistsError(f"Table '{table_name}' already exists.")
@@ -78,6 +79,7 @@ def create_table(metadata, table_name, columns):
 
 @handle_db_errors
 @confirm_action("удаление таблицы")
+@log_time
 def drop_table(metadata, table_name):
     if table_name not in metadata:
         raise KeyError(f"Table '{table_name}' does not exist.")
@@ -88,6 +90,7 @@ def drop_table(metadata, table_name):
 
 
 @handle_db_errors
+@log_time
 def insert(metadata, table_name, row_data):
     if table_name not in metadata:
         raise KeyError(f"Table '{table_name}' does not exist.")
@@ -115,6 +118,7 @@ def insert(metadata, table_name, row_data):
 
 
 @handle_db_errors
+@log_time
 def select(metadata, table_name, condition_dict=None):
     if table_name not in metadata:
         raise KeyError(f"Table '{table_name}' does not exist.")
@@ -146,6 +150,7 @@ def select(metadata, table_name, condition_dict=None):
 
 
 @handle_db_errors
+@log_time
 def update(metadata, table_name, set_clause, condition_dict):
     if table_name not in metadata:
         raise KeyError(f"Table '{table_name}' does not exist.")
@@ -199,6 +204,7 @@ def update(metadata, table_name, set_clause, condition_dict):
 
 @handle_db_errors
 @confirm_action("удаление записей")
+@log_time
 def delete(metadata, table_name, condition_dict):
     todelete = select(metadata, table_name, condition_dict)
     if todelete is None:
