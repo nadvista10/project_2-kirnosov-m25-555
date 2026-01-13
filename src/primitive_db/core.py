@@ -127,7 +127,63 @@ def select(metadata, table_name, condition_dict=None):
     
 
 def update(metadata, table_name, set_clause, condition_dict):
-    pass
+    if table_name not in metadata:
+        raise ValueError(f"Table '{table_name}' does not exist.")
+
+    table = metadata[table_name]
+    columns = table["columns"]
+
+    if reserved_id_column in set_clause:
+        raise ValueError(f"Column '{reserved_id_column}' cannot be updated.")
+
+    if any(col not in columns for col in set_clause.keys()):
+        raise ValueError("One or more columns in SET do not exist in the table.")
+
+    if condition_dict is not None:
+        if any(col not in columns for col in condition_dict.keys()):
+            raise ValueError("One or more columns in WHERE do not exist in the table.")
+
+    def _coerce(col, value):
+        col_type = columns[col]
+        if col_type == "int":
+            try:
+                return int(value)
+            except ValueError:
+                raise ValueError(f"Invalid value for column '{col}': expected int.")
+        if col_type == "bool":
+            if str(value).lower() in ("true", "1"):
+                return True
+            if str(value).lower() in ("false", "0"):
+                return False
+            raise ValueError(f"Invalid value for column '{col}': expected bool.")
+        if col_type == "str":
+            return str(value)
+        raise ValueError(f"Unsupported column type: {col_type}")
+
+    table_data = load_table_data(table_name)
+
+    coerced_set = {col: _coerce(col, val) for col, val in set_clause.items()}
+    coerced_where = None
+    if condition_dict:
+        coerced_where = {col: _coerce(col, val) for col, val in condition_dict.items()}
+
+    updated_count = 0
+    for _, row in table_data.items():
+        match = True
+        if coerced_where:
+            for col, expected in coerced_where.items():
+                if row.get(col) != expected:
+                    match = False
+                    break
+        if not match:
+            continue
+
+        for col, new_val in coerced_set.items():
+            row[col] = new_val
+        updated_count += 1
+
+    save_table_data(table_name, table_data)
+    return updated_count
 
 
 def delete(metadata, table_name, condition_dict):

@@ -3,7 +3,7 @@ import prompt
 import shlex
 from prettytable import PrettyTable
 from primitive_db.utils import load_metadata, save_metadata
-from primitive_db.core import create_table, drop_table, insert, select, delete
+from primitive_db.core import create_table, drop_table, insert, select, delete, update
 
 
 def run():
@@ -16,6 +16,7 @@ def run():
         "insert": insert_command,
         "select": select_command,
         "delete": delete_command,
+        "update": update_command,
     }
 
     metadata = load_metadata()
@@ -158,6 +159,41 @@ def delete_command(metadata, user_input, args):
         print(f"Ошибка выборки: {e}")
 
 
+def update_command(metadata, user_input, args):
+    pattern = r'^\s*update\s+(\w+)(.*)$'
+    match = re.match(pattern, user_input, re.IGNORECASE)
+    if not match:
+        print("Синтаксис: update <имя_таблицы> set <столбец>=<значение> where <столбец>=<значение>")
+        return
+
+    table_name = match.group(1)
+    rest = match.group(2).strip()
+
+    if table_name not in metadata:
+        print(f"Таблица '{table_name}' не существует.")
+        return
+
+    if not rest:
+        print("Синтаксис: update <имя_таблицы> set <столбец>=<значение> where <столбец>=<значение>")
+        return
+
+    try:
+        set_dict = _parse_set(rest)
+        where_dict = _parse_where(rest)
+
+        if not set_dict:
+            print("Не указаны изменения. Добавьте хотя бы один 'set'.")
+            return
+        if not where_dict:
+            print("Не указаны условия. Добавьте хотя бы один 'where'.")
+            return
+
+        updated = update(metadata, table_name, set_dict, where_dict)
+        print(f"Обновлено записей: {updated}")
+    except Exception as e:
+        print(f"Ошибка обновления: {e}")
+
+
 def show_error_command():
     print("Неизвестная команда. Введите 'help' для справки.")
 
@@ -168,34 +204,62 @@ def print_help_command():
     print("<command> create_table <имя_таблицы> <столбец1:тип> .. - создать таблицу")
     print("<command> list_tables - показать список всех таблиц")
     print("<command> drop_table <имя_таблицы> - удалить таблицу")
+    print("<command> insert into <имя_таблицы> values (<значение1>, ...) - добавить запись")
+    print("<command> select from <имя_таблицы> [where ...] - выбрать записи")
+    print("<command> delete from <имя_таблицы> [where ...] - удалить записи")
+    print("<command> update <имя_таблицы> set ... where ... - обновить записи")
     
     print("\nОбщие команды:")
     print("<command> exit - выход из программы")
     print("<command> help - справочная информация\n") 
 
 
-def _parse_where(where_part):
-    tokens = list(shlex.shlex(where_part, posix=True))
-    where_dict = {}
+def _parse_keyword_clauses(text_part, keyword):
+    lexer = shlex.shlex(text_part, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    tokens = list(lexer)
+
+    clauses = {}
     i = 0
+    keyword_lower = keyword.lower()
     while i < len(tokens):
-        if tokens[i].lower() == 'where' and i + 2 < len(tokens): #+2 из-за формата where col=val
-            keyval = tokens[i+1]
-            if '=' in keyval:
-                key, value = keyval.split('=', 1)
-            else:
-                key = keyval
-                if i+2 < len(tokens) and tokens[i+2] == '=':
-                    value = tokens[i+3] if i+3 < len(tokens) else ''
-                    i += 1
-                else:
-                    value = tokens[i+2]
-                    i += 1
-            key = key.strip()
-            value = value.strip('"\'')
-            
-            where_dict[key] = value
+        if tokens[i].lower() != keyword_lower:
+            i += 1
+            continue
+
+        if i + 1 >= len(tokens):
+            break
+
+        keyval = tokens[i + 1]
+        key = None
+        value = None
+
+        if "=" in keyval:
+            key, value = keyval.split("=", 1)
+            i += 2
+        elif i + 3 < len(tokens) and tokens[i + 2] == "=":
+            key = keyval
+            value = tokens[i + 3]
+            i += 4
+        elif i + 2 < len(tokens):
+            key = keyval
+            value = tokens[i + 2]
             i += 3
         else:
-            i += 1
-    return where_dict
+            break
+
+        key = (key or "").strip()
+        value = (value or "").strip().strip('"\'')
+        if key:
+            clauses[key] = value
+
+    return clauses
+
+
+def _parse_where(where_part):
+    return _parse_keyword_clauses(where_part, "where")
+
+
+def _parse_set(set_part):
+    return _parse_keyword_clauses(set_part, "set")
