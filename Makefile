@@ -18,9 +18,3 @@ package-install-windows:
 	
 lint:
 	poetry run ruff check .
-
-dev:
-	make install
-	make build
-	make publish
-	make package-install-windows

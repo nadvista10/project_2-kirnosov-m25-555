@@ -1,26 +1,24 @@
-[project]
-name = "project_2-kirnosov-m25-555"
-version = "0.1.0"
-description = ""
-authors = [
-    {name = "Egor Kirnosov",email = "kirnosov.eg@yandex.ru"}
-]
-readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "prompt (>=0.4.1,<0.5.0)",
-    "prettytable (>=3.17.0,<4.0.0)"
-]
-
-
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
+name = "project_2-kirnosov-m25-555"
+version = "0.1.0"
+description = "Учебная файловая мини-СУБД на JSON с CLI."
+authors = ["Egor Kirnosov <kirnosov.eg@yandex.ru>"]
+readme = "README.md"
 packages = [
     { include = "primitive_db", from = "src" }
 ]
+
+[tool.poetry.dependencies]
+python = ">=3.12"
+prompt = ">=0.4.1,<0.5.0"
+prettytable = ">=3.17.0,<4.0.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = ">=0.14.8,<0.15.0"
 
 [tool.poetry.scripts]
 project = "primitive_db.main:main" 
@@ -33,7 +31,3 @@ exclude = ["venv", ".venv", "dist", "__pycache__"]
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 ignore = [] 
-[dependency-groups]
-dev = [
-    "ruff (>=0.14.8,<0.15.0)"
-]

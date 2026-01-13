@@ -161,3 +161,5 @@ exit
 - `src/primitive_db/utils.py` - чтение/запись JSON
 - `src/decorators.py` - декораторы и замыкания
 - `src/primitive_db/main.py` - точка входа
+
+[![asciicast](https://asciinema.org/a/4bbWXvd17SVdDh5I.svg)](https://asciinema.org/a/4bbWXvd17SVdDh5I)
