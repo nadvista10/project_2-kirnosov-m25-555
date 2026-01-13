@@ -2,8 +2,8 @@ import re
 import prompt
 import shlex
 from prettytable import PrettyTable
-from primitive_db.utils import load_metadata, load_table_data, save_metadata
-from primitive_db.core import create_table, drop_table, insert, select
+from primitive_db.utils import load_metadata, save_metadata
+from primitive_db.core import create_table, drop_table, insert, select, delete
 
 
 def run():
@@ -15,6 +15,7 @@ def run():
         "list_tables": list_tables_command,
         "insert": insert_command,
         "select": select_command,
+        "delete": delete_command,
     }
 
     metadata = load_metadata()
@@ -116,8 +117,65 @@ def select_command(metadata, user_input, args):
         return
 
     rest = match.group(2).strip()
-    #парсинг условий where
-    tokens = list(shlex.shlex(rest, posix=True))
+
+    try:
+        where_dict = _parse_where(rest) if rest else {}
+        results = select(metadata, table_name, where_dict if where_dict else None)
+        if not results:
+            print("Нет записей.")
+            return
+
+        pt = PrettyTable()
+        pt.field_names = list(results[0].keys())
+        for row in results:
+            pt.add_row([row[col] for col in pt.field_names])
+        print(pt)
+    except Exception as e:
+        print(f"Ошибка выборки: {e}")
+
+
+def delete_command(metadata, user_input, args):
+    pattern = r'^\s*delete\s+from\s+(\w+)(.*)$'
+    match = re.match(pattern, user_input, re.IGNORECASE)
+    if not match:
+        print("Синтаксис: select from <имя_таблицы> [where ...]")
+        return
+    
+    table_name = match.group(1)
+
+    if table_name not in metadata:
+        print(f"Таблица '{table_name}' не существует.")
+        return
+
+    rest = match.group(2).strip()
+
+    try:
+        where_dict = _parse_where(rest) if rest else {}
+        result = delete(metadata, table_name, where_dict if where_dict else None)
+        print(f"Удалено записей: {result}")
+        
+    except Exception as e:
+        print(f"Ошибка выборки: {e}")
+
+
+def show_error_command():
+    print("Неизвестная команда. Введите 'help' для справки.")
+
+
+def print_help_command():
+    print("\n***Процесс работы с таблицей***")
+    print("Функции:")
+    print("<command> create_table <имя_таблицы> <столбец1:тип> .. - создать таблицу")
+    print("<command> list_tables - показать список всех таблиц")
+    print("<command> drop_table <имя_таблицы> - удалить таблицу")
+    
+    print("\nОбщие команды:")
+    print("<command> exit - выход из программы")
+    print("<command> help - справочная информация\n") 
+
+
+def _parse_where(where_part):
+    tokens = list(shlex.shlex(where_part, posix=True))
     where_dict = {}
     i = 0
     while i < len(tokens):
@@ -140,33 +198,4 @@ def select_command(metadata, user_input, args):
             i += 3
         else:
             i += 1
-
-    try:
-        results = select(metadata, table_name, where_dict if where_dict else None)
-        if not results:
-            print("Нет записей.")
-            return
-
-        pt = PrettyTable()
-        pt.field_names = list(results[0].keys())
-        for row in results:
-            pt.add_row([row[col] for col in pt.field_names])
-        print(pt)
-    except Exception as e:
-        print(f"Ошибка выборки: {e}")
-
-
-def show_error_command():
-    print("Неизвестная команда. Введите 'help' для справки.")
-
-
-def print_help_command():
-    print("\n***Процесс работы с таблицей***")
-    print("Функции:")
-    print("<command> create_table <имя_таблицы> <столбец1:тип> .. - создать таблицу")
-    print("<command> list_tables - показать список всех таблиц")
-    print("<command> drop_table <имя_таблицы> - удалить таблицу")
-    
-    print("\nОбщие команды:")
-    print("<command> exit - выход из программы")
-    print("<command> help - справочная информация\n") 
+    return where_dict

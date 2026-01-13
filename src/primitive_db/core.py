@@ -126,9 +126,16 @@ def select(metadata, table_name, condition_dict=None):
     return results  
     
 
-def update(metadata, table_name, set_clause, where_clause):
+def update(metadata, table_name, set_clause, condition_dict):
     pass
 
 
-def delete(metadata, table_name, where_clause):
-    pass
+def delete(metadata, table_name, condition_dict):
+    todelete = select(metadata, table_name, condition_dict)
+    deleted_count = len(todelete)
+    table_data = load_table_data(table_name)
+
+    filtered_table = {id: row for id, row in table_data.items() if row not in todelete}
+    save_table_data(table_name, filtered_table)
+
+    return deleted_count
