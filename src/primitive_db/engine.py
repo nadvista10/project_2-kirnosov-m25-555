@@ -1,6 +1,7 @@
+import re
 import prompt
 import shlex
-
+from prettytable import PrettyTable
 from primitive_db.utils import load_metadata, load_table_data, save_metadata
 from primitive_db.core import create_table, drop_table, insert, select
 
@@ -72,8 +73,6 @@ def list_tables_command(metadata, user_input, args):
 
 
 def insert_command(metadata, user_input, args):
-    import re
-
     pattern = r'^\s*insert\s+into\s+(\w+)\s+values\s*\((.*)\)\s*$'
     match = re.match(pattern, user_input, re.IGNORECASE)
     if not match:
@@ -81,6 +80,10 @@ def insert_command(metadata, user_input, args):
         return
     table_name = match.group(1)
     values_str = match.group(2)
+
+    if table_name not in metadata:
+        print(f"Таблица '{table_name}' не существует.")
+        return
 
     try:
         lexer = shlex.shlex(values_str, posix=True)
@@ -98,9 +101,59 @@ def insert_command(metadata, user_input, args):
         print(f"Ошибка вставки: {e}")
     
 
-
 def select_command(metadata, user_input, args):
-    pass
+    # Ожидается: select from <table> [where ...]
+    pattern = r'^\s*select\s+from\s+(\w+)(.*)$'
+    match = re.match(pattern, user_input, re.IGNORECASE)
+    if not match:
+        print("Синтаксис: select from <имя_таблицы> [where ...]")
+        return
+    
+    table_name = match.group(1)
+
+    if table_name not in metadata:
+        print(f"Таблица '{table_name}' не существует.")
+        return
+
+    rest = match.group(2).strip()
+    #парсинг условий where
+    tokens = list(shlex.shlex(rest, posix=True))
+    where_dict = {}
+    i = 0
+    while i < len(tokens):
+        if tokens[i].lower() == 'where' and i + 2 < len(tokens): #+2 из-за формата where col=val
+            keyval = tokens[i+1]
+            if '=' in keyval:
+                key, value = keyval.split('=', 1)
+            else:
+                key = keyval
+                if i+2 < len(tokens) and tokens[i+2] == '=':
+                    value = tokens[i+3] if i+3 < len(tokens) else ''
+                    i += 1
+                else:
+                    value = tokens[i+2]
+                    i += 1
+            key = key.strip()
+            value = value.strip('"\'')
+            
+            where_dict[key] = value
+            i += 3
+        else:
+            i += 1
+
+    try:
+        results = select(metadata, table_name, where_dict if where_dict else None)
+        if not results:
+            print("Нет записей.")
+            return
+
+        pt = PrettyTable()
+        pt.field_names = list(results[0].keys())
+        for row in results:
+            pt.add_row([row[col] for col in pt.field_names])
+        print(pt)
+    except Exception as e:
+        print(f"Ошибка выборки: {e}")
 
 
 def show_error_command():

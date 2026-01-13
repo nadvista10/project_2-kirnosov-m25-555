@@ -82,13 +82,53 @@ def insert(metadata, table_name, row_data):
     save_table_data(table_name, table_data)
 
 
-def select(table_data, where_clause=None):
+def select(metadata, table_name, condition_dict=None):
+    if table_name not in metadata:
+        raise ValueError(f"Table '{table_name}' does not exist.")
+    
+    table = metadata[table_name]
+    columns = table["columns"]
+
+    if any(col not in columns for col in (condition_dict or {}).keys()):
+        raise ValueError("One or more columns in the condition do not exist in the table.")
+
+    table_data = load_table_data(table_name)
+
+    if not condition_dict:
+        return list(table_data.values())
+
+    results = []
+    for id, row in table_data.items():
+        all = True
+        for col, value in condition_dict.items():
+            if columns[col] == "int":
+                try:
+                    cond_value = int(value)
+                except ValueError:
+                    raise ValueError(f"Invalid condition value for column '{col}': expected int.")
+            elif columns[col] == "bool":
+                if value.lower() in ("true", "1"):
+                    cond_value = True
+                elif value.lower() in ("false", "0"):
+                    cond_value = False
+                else:
+                    raise ValueError(f"Invalid condition value for column '{col}': expected bool.")
+            elif columns[col] == "str":
+                cond_value = str(value)
+            else:
+                raise ValueError(f"Unsupported column type: {columns[col]}")
+            
+            if row[col] != cond_value:
+                all = False
+                break
+        if all:
+            results.append(row)
+    return results  
+    
+
+def update(metadata, table_name, set_clause, where_clause):
     pass
 
 
-def update(table_data, set_clause, where_clause):
-    pass
-
-
-def delete(table_data, where_clause):
+def delete(metadata, table_name, where_clause):
     pass
