@@ -5,12 +5,7 @@ import prompt
 from prettytable import PrettyTable
 
 from primitive_db.core import create_table, delete, drop_table, insert, select, update
-from primitive_db.utils import load_metadata, save_metadata
-
-
-def _require_table(metadata, table_name):
-    if table_name not in metadata:
-        raise ValueError(f"Таблица '{table_name}' не существует.")
+from primitive_db.utils import load_metadata
 
 
 def _print_rows(rows):
@@ -33,7 +28,8 @@ def _match(pattern, user_input, usage):
 
 def run():
     commands_no_args = {
-        "help": print_help_command,}
+        "help": print_help_command,
+    }
     commands_with_args = {
         "create_table": create_table_command,
         "drop_table": drop_table_command,
@@ -83,23 +79,14 @@ def create_table_command(metadata, user_input, args):
     if len(args) < 2:
         print("Для создания таблицы необходимо указать хотя бы один столбец")
         return
-    try:
-        create_table(metadata, args[0], args[1:])
-        save_metadata(metadata)
-    except ValueError as e:
-        print(e)
+    create_table(metadata, args[0], args[1:])
 
 
 def drop_table_command(metadata, user_input, args):
     if len(args) < 1:
         print("Для удаления таблицы необходимо указать имя")
         return
-    try:
-        drop_table(metadata, args[0])
-        save_metadata(metadata)
-
-    except ValueError as e:
-        print(e)
+    drop_table(metadata, args[0])
 
 
 def list_tables_command(metadata, user_input, args):
@@ -117,19 +104,17 @@ def insert_command(metadata, user_input, args):
         )
         table_name = match.group(1)
         values_str = match.group(2)
-        _require_table(metadata, table_name)
 
         lexer = shlex.shlex(values_str, posix=True)
         lexer.whitespace = ','
         lexer.whitespace_split = True
         lexer.quotes = '"\''
         values = [v.strip() for v in lexer if v.strip()]
-
-        insert(metadata, table_name, values)
     except ValueError as e:
         print(e)
-    except Exception as e:
-        print(f"Ошибка вставки: {e}")
+        return
+
+    insert(metadata, table_name, values)
     
 
 def select_command(metadata, user_input, args):
@@ -137,17 +122,17 @@ def select_command(metadata, user_input, args):
     try:
         match = _match(r'^\s*select\s+from\s+(\w+)(.*)$', user_input, usage)
         table_name = match.group(1)
-        _require_table(metadata, table_name)
 
         rest = match.group(2).strip()
         where_dict = _parse_where(rest) if rest else {}
-
-        rows = select(metadata, table_name, where_dict if where_dict else None)
-        _print_rows(rows)
     except ValueError as e:
         print(e)
-    except Exception as e:
-        print(f"Ошибка выборки: {e}")
+        return
+
+    rows = select(metadata, table_name, where_dict if where_dict else None)
+    if rows is None:
+        return
+    _print_rows(rows)
 
 
 def delete_command(metadata, user_input, args):
@@ -155,15 +140,16 @@ def delete_command(metadata, user_input, args):
     try:
         match = _match(r'^\s*delete\s+from\s+(\w+)(.*)$', user_input, usage)
         table_name = match.group(1)
-        _require_table(metadata, table_name)
         rest = match.group(2).strip()
         where_dict = _parse_where(rest) if rest else {}
-        deleted = delete(metadata, table_name, where_dict if where_dict else None)
-        print(f"Удалено записей: {deleted}")
     except ValueError as e:
         print(e)
-    except Exception as e:
-        print(f"Ошибка выборки: {e}")
+        return
+
+    deleted = delete(metadata, table_name, where_dict if where_dict else None)
+    if deleted is None:
+        return
+    print(f"Удалено записей: {deleted}")
 
 
 def update_command(metadata, user_input, args):
@@ -174,7 +160,6 @@ def update_command(metadata, user_input, args):
     try:
         match = _match(r'^\s*update\s+(\w+)(.*)$', user_input, usage)
         table_name = match.group(1)
-        _require_table(metadata, table_name)
         rest = match.group(2).strip()
         if not rest:
             raise ValueError(usage)
@@ -187,12 +172,14 @@ def update_command(metadata, user_input, args):
         if not where_dict:
             raise ValueError("Не указаны условия. Добавьте хотя бы один 'where'.")
 
-        updated = update(metadata, table_name, set_dict, where_dict)
-        print(f"Обновлено записей: {updated}")
     except ValueError as e:
         print(e)
-    except Exception as e:
-        print(f"Ошибка обновления: {e}")
+        return
+
+    updated = update(metadata, table_name, set_dict, where_dict)
+    if updated is None:
+        return
+    print(f"Обновлено записей: {updated}")
 
 
 def show_error_command():
@@ -212,10 +199,10 @@ def print_help_command():
     print("<command> select from <имя_таблицы> [where ...] - выбрать записи")
     print("<command> delete from <имя_таблицы> [where ...] - удалить записи")
     print("<command> update <имя_таблицы> set ... where ... - обновить записи")
-    
+
     print("\nОбщие команды:")
     print("<command> exit - выход из программы")
-    print("<command> help - справочная информация\n") 
+    print("<command> help - справочная информация\n")
 
 
 def _parse_keyword_clauses(text_part, keyword):

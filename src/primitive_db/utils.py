@@ -11,7 +11,7 @@ def load_metadata():
 
 def save_metadata(data):
     if not isinstance(data, dict):
-        raise ValueError("data must be a dictionary")
+        raise TypeError("data must be a dictionary")
     save_data_to_json(metadata_file_name, data)
 
 

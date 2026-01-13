@@ -1,4 +1,10 @@
-from primitive_db.utils import delete_table_data, load_table_data, save_table_data
+from decorators import handle_db_errors
+from primitive_db.utils import (
+    delete_table_data,
+    load_table_data,
+    save_metadata,
+    save_table_data,
+)
 
 reserved_id_column = "__ID"
 
@@ -34,11 +40,13 @@ def _coerce_value(columns, column_name, raw_value, *, mode):
 
     raise ValueError(f"Unsupported column type: {column_type}")
 
+
+@handle_db_errors
 def create_table(metadata, table_name, columns):
     if table_name in metadata:
-        raise ValueError(f"Table '{table_name}' already exists.")
-    
-    table = {"columns": {reserved_id_column:"int"}}
+        raise FileExistsError(f"Table '{table_name}' already exists.")
+
+    table = {"columns": {reserved_id_column: "int"}}
 
     table_columns = table["columns"]
 
@@ -52,7 +60,7 @@ def create_table(metadata, table_name, columns):
         c_name, c_type = result
 
         if c_name == reserved_id_column:
-            raise ValueError("Column name 'ID' is reserved.")
+            raise ValueError(f"Column name '{reserved_id_column}' is reserved.")
         
         if c_name in table_columns:
             raise ValueError(
@@ -65,24 +73,28 @@ def create_table(metadata, table_name, columns):
             raise ValueError(f"Unsupported column type: {c_type}")
 
     metadata[table_name] = table
+    save_metadata(metadata)
 
 
+@handle_db_errors
 def drop_table(metadata, table_name):
     if table_name not in metadata:
-        raise ValueError(f"Table '{table_name}' does not exist.")
-    
+        raise KeyError(f"Table '{table_name}' does not exist.")
+
     del metadata[table_name]
     delete_table_data(table_name)
+    save_metadata(metadata)
 
 
+@handle_db_errors
 def insert(metadata, table_name, row_data):
     if table_name not in metadata:
-        raise ValueError(f"Table '{table_name}' does not exist.")
-    
+        raise KeyError(f"Table '{table_name}' does not exist.")
+
     table = metadata[table_name]
     columns = table["columns"]
     
-    if len(row_data) != len(columns) - 1: # -1 because of reserved ID column
+    if len(row_data) != len(columns) - 1:  # -1 because of reserved ID column
         raise ValueError("Row data does not match table columns.")
 
     row = {}
@@ -101,17 +113,17 @@ def insert(metadata, table_name, row_data):
     save_table_data(table_name, table_data)
 
 
+@handle_db_errors
 def select(metadata, table_name, condition_dict=None):
     if table_name not in metadata:
-        raise ValueError(f"Table '{table_name}' does not exist.")
-    
+        raise KeyError(f"Table '{table_name}' does not exist.")
+
     table = metadata[table_name]
     columns = table["columns"]
 
     if any(col not in columns for col in (condition_dict or {}).keys()):
-        raise ValueError(
-            "One or more columns in the condition do not exist in the table."
-        )
+        missing = [col for col in (condition_dict or {}).keys() if col not in columns]
+        raise KeyError(f"Unknown column(s) in condition: {', '.join(missing)}")
 
     table_data = load_table_data(table_name)
 
@@ -131,22 +143,26 @@ def select(metadata, table_name, condition_dict=None):
     return results
     
 
+
+@handle_db_errors
 def update(metadata, table_name, set_clause, condition_dict):
     if table_name not in metadata:
-        raise ValueError(f"Table '{table_name}' does not exist.")
+        raise KeyError(f"Table '{table_name}' does not exist.")
 
     table = metadata[table_name]
     columns = table["columns"]
 
     if reserved_id_column in set_clause:
-        raise ValueError(f"Column '{reserved_id_column}' cannot be updated.")
+        raise PermissionError(f"Column '{reserved_id_column}' cannot be updated.")
 
     if any(col not in columns for col in set_clause.keys()):
-        raise ValueError("One or more columns in SET do not exist in the table.")
+        missing = [col for col in set_clause.keys() if col not in columns]
+        raise KeyError(f"Unknown column(s) in SET: {', '.join(missing)}")
 
     if condition_dict is not None:
         if any(col not in columns for col in condition_dict.keys()):
-            raise ValueError("One or more columns in WHERE do not exist in the table.")
+            missing = [col for col in condition_dict.keys() if col not in columns]
+            raise KeyError(f"Unknown column(s) in WHERE: {', '.join(missing)}")
 
     table_data = load_table_data(table_name)
 
@@ -180,8 +196,11 @@ def update(metadata, table_name, set_clause, condition_dict):
     return updated_count
 
 
+@handle_db_errors
 def delete(metadata, table_name, condition_dict):
     todelete = select(metadata, table_name, condition_dict)
+    if todelete is None:
+        return None
     deleted_count = len(todelete)
     table_data = load_table_data(table_name)
 
